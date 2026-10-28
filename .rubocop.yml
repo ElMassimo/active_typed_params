@@ -1,0 +1,40 @@
+require:
+  - standard
+
+plugins:
+  - standard-performance
+
+inherit_gem:
+  standard: config/base.yml
+
+AllCops:
+  TargetRubyVersion: 3.3
+  SuggestExtensions: false
+  NewCops: enable
+  Exclude:
+    - spec/fixtures/**/* # generated source snapshots
+    - vendor/**/*
+    - tmp/**/*
+
+Style/TrailingCommaInArrayLiteral:
+  EnforcedStyleForMultiline: comma
+Style/TrailingCommaInHashLiteral:
+  EnforcedStyleForMultiline: comma
+Style/TrailingCommaInArguments:
+  EnforcedStyleForMultiline: comma
+
+Style/HashSyntax:
+  EnforcedStyle: ruby19
+  EnforcedShorthandSyntax: always
+
+Style/TernaryParentheses:
+  Enabled: false
+
+Style/RedundantStructKeywordInit:
+  Enabled: false
+
+Style/NestedTernaryOperator:
+  Enabled: false
+
+Layout/AccessModifierIndentation:
+  EnforcedStyle: outdent
