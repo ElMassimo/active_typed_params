@@ -14,6 +14,7 @@ Gem::Specification.new do |s|
   s.metadata = {
     "source_code_uri" => s.homepage,
     "changelog_uri" => "#{s.homepage}/blob/main/CHANGELOG.md",
+    "allowed_push_host" => "https://rubygems.org",
     "rubygems_mfa_required" => "true",
   }
   s.extra_rdoc_files = ["README.md"]

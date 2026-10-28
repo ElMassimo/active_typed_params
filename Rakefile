@@ -9,3 +9,7 @@ RuboCop::RakeTask.new
 RSpec::Core::RakeTask.new
 
 task default: %i[spec rubocop]
+
+# `rake release` tags the version, pushes the commit and tag, and pushes the
+# gem to RubyGems, once the specs and the linter pass.
+task "release:guard_clean" => :default
