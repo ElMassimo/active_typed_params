@@ -38,38 +38,38 @@ RSpec.describe ActiveTypedParams::Compiler, :active_typed_params do
       typed_params(:order_params, unknown: :report) {
         param(
           :payment_method,
-          amount: :decimal,
-          gift_wrap: :boolean,
-          store_ids: array(id(bytes: 4)),
-          delivery: [
-            :recipient_email,
-            :recipient_phone_number,
-            :same_email_reason,
-            delivery_date: :date,
-            delivery_method: enum(%w[email mail text print]),
-            recipient_type: string(in: ["User", "Contact"]),
-            recipient_id: :id,
-            save_delivery_information: :boolean,
-            recipient_mailing_address: [:name, :street, :city, :state, :zip],
+          total: :decimal,
+          express_shipping: :boolean,
+          coupon_ids: array(id(bytes: 4)),
+          shipping: [
+            :email,
+            :phone,
+            :instructions,
+            ship_on: :date,
+            carrier: enum(%w[ups fedex usps dhl]),
+            address_type: string(in: ["Home", "Office"]),
+            address_id: :id,
+            save_address: :boolean,
+            address: [:name, :street, :city, :state, :zip],
           ],
-          greeting: [
-            from: string(allow_blank: true),
-            to: string(allow_blank: true),
-            message: string(max_length: 2000, allow_blank: true),
-            category_id: id(bytes: 4),
-            card: [id: id(bytes: 4, required: true)],
-            greeting_card_customization: [
-              :sender,
-              :recipient,
-              :title,
+          cart: [
+            channel: string(allow_blank: true),
+            campaign: string(allow_blank: true),
+            notes: string(max_length: 2000, allow_blank: true),
+            store_id: id(bytes: 4),
+            customer: [id: id(bytes: 4, required: true)],
+            packaging: [
+              :box,
+              :filler,
+              :label,
               :note,
-              story_slides: array([
-                :photo,
-                :video,
-                :text,
-                :frame,
-                :color_filter,
-                stickers: array(
+              line_items: array([
+                :sku,
+                :name,
+                :size,
+                :color,
+                :variant,
+                engravings: array(
                   key: string(required: true),
                   x: float(required: true),
                   y: float(required: true),

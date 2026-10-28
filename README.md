@@ -35,11 +35,11 @@ typed_params(:contact_params) {
 
 [Strong parameters] tell Rails which keys a request can set, but not what they should contain.
 
-A hash sent where we expect a string is silently dropped, a number goes through as an `Integer`, and the code that receives it fails a few calls later with a `NoMethodError`, which shows up in your error tracker as a 500.
+If a request sends a hash where a string is expected, strong parameters silently drop it. A number passes through as an `Integer`. Either can cause a `NoMethodError` later, returning a `500` instead of a validation error.
 
-Checking every value by hand is noisy and easy to forget, and [ActiveInteraction] runs too late: by the time it validates, the controller already did part of the work.
+Manual type checks are repetitive, and [ActiveInteraction] only validates inputs once the controller calls it.
 
-`typed_params` declares the keys _and_ their types next to the action that reads them. A bad request is rejected with a `400` that names the offending parameter, and the rest of the code can trust what it receives.
+`typed_params` declares keys and types next to the action that reads them. Parameters of the wrong type are rejected with a `400` that names the parameter, before the action passes them to a model or interaction.
 
 Each declaration is compiled into a single Ruby method, which makes it [5 to 10 times faster][benchmarks] than `params.permit`.
 
@@ -47,11 +47,11 @@ Each declaration is compiled into a single Ruby method, which makes it [5 to 10 
 
 - Reads like a permit list: `required(:email, tags: array(:string))`
 - Numbers, booleans, dates, ids, enums, files, nested hashes, arrays, maps, and values of several types
-- [Infers types][inference] from interaction inputs and model columns, so they are written once
-- Strings, arrays and maps are capped by default, and text columns get a generous limit
-- [Errors][errors] name the parameter but never echo the value: `delivery.recipient_id must be an id`
-- A `400` for a malformed request, and a `422` for a mistake a person can make in a form
-- Up to 10x faster than `params.permit`, with a fraction of the allocations
+- [Infers types][inference] from interaction inputs and model columns
+- Default length limits for strings, arrays and maps, with a higher limit for text columns
+- [Errors][errors] name the parameter but never echo the value: `delivery.address_id must be an id`
+- A `400` for a malformed request, and a `422` for validation errors such as blank or out-of-range values
+- Up to 10x faster than `params.permit`, with fewer allocations
 
 ## Installation 💿
 
@@ -99,11 +99,11 @@ contact_params
 # => { name: "Ana", relationship: "friend", event_ids: [12, 34] }
 ```
 
-A request that sends `{ "name": { "$ne": "" } }` never reaches the model: it gets a `400` with `name must be a string`.
+A request that sends `{ "name": { "$ne": "" } }` is rejected before the model is called, with a `400` and `name must be a string`.
 
 > **Note**
 >
-> Keys are optional and accept `null` unless you say otherwise, which is how forms and interactions usually behave.
+> Keys are optional and accept `null` by default.
 
 ## Types 🏷
 
@@ -133,11 +133,11 @@ Forms send an empty string for a cleared input, so `""` reads as `nil` for every
 >
 > `{}`, `open: true` and `:any` accept keys you didn't declare, just like `permit(key: {})`.
 >
-> Use them for values stored as a whole, such as a JSON column, and never pass them to `update` or `assign_attributes` as the attributes themselves. You can [list them in a spec](#inspecting-schemas-), so adding one is a conscious decision.
+> Use them for values stored as a whole, such as a JSON column, and never pass them to `update` or `assign_attributes` as the attributes themselves. You can [list them in a spec](#inspecting-schemas-) to check for unintended additions.
 
 ### Options
 
-When a key needs more than its type, use the method form:
+To set options on a key, use the method form:
 
 ```ruby
 typed_params(:search_params) {
@@ -237,13 +237,13 @@ typed_params(:post_params) {
 }
 ```
 
-A value outside the list is a `422`, since a person can pick it in a form.
+A value outside the list returns a `422` validation error.
 
 To pass your own enum classes, register an [enum adapter](#enum_adapters).
 
 ## Inference 🔮
 
-In most cases, the types already exist in a model or an [ActiveInteraction], so you can let `typed_params` read them instead of writing them again.
+`typed_params` can infer types from a model or an [ActiveInteraction].
 
 ### From an interaction
 
@@ -272,7 +272,7 @@ typed_params(:role_params, root: :role) {
 
 String limits, text columns, enums, array columns, `NOT NULL` constraints, [StoreModel] attributes, and attachments are all taken into account.
 
-When the attribute sits inside a literal, use `attribute_from`:
+To infer a single attribute inside a literal, use `attribute_from`:
 
 ```ruby
 param(
@@ -284,7 +284,7 @@ param(
 
 ### Overrides
 
-Both take overrides for specific keys, which can add options or replace the type:
+Both `inputs_from` and `attributes_from` accept per-key overrides to add options or replace the type:
 
 ```ruby
 inputs_from UpdateUserAccess, super_admin: {allow_if: :super_admin?}
@@ -303,13 +303,13 @@ def index
 end
 ```
 
-`require` and `optional` return the value for a single key, and a hash for several. `slice` always returns a hash, with only the keys the request sent, which is handy for updates.
+`require` and `optional` return the value for a single key, and a hash for several. `slice` always returns a hash containing only keys present in the request, so updates leave omitted attributes unchanged.
 
 Each distinct declaration is compiled once and cached, so an inline read costs a little more than a named schema: about 1.4 µs for `typed_params.require(:email)`.
 
 > **Note**
 >
-> When an action reads more than a couple of keys, prefer a named schema: it's easier to read, and faster.
+> Prefer a named schema for actions that read several keys.
 
 ## Schema Options 🔧
 
@@ -328,8 +328,8 @@ typed_params(:contact_params, root: :contact) {
 Reads the hash a proc returns instead of all the `params`:
 
 ```ruby
-typed_params(:greeting_params, source: -> { params.require(:order).require(:greeting) }) {
-  param(:sender_name, message: string(max_length: 2_500))
+typed_params(:address_params, source: -> { params.require(:order).require(:shipping_address) }) {
+  param(:street, :city, notes: string(max_length: 2_500))
 }
 ```
 
@@ -339,7 +339,7 @@ Keeps the result for the rest of the request, for a schema read more than once.
 
 ### `required`
 
-Makes every key required, unless it says otherwise.
+Makes every key required unless explicitly declared optional.
 
 ### `unknown`
 
@@ -347,7 +347,7 @@ Keys a schema doesn't declare are ignored by default. Use `unknown: :report` to 
 
 ## Sharing Schemas 🧱
 
-A fragment groups keys that several schemas share, and lives beside the model it describes:
+A fragment defines keys shared by several schemas. You can define it alongside the model:
 
 ```ruby
 class Address
@@ -385,11 +385,11 @@ REQUEST_PARAMS.validate(params)
 | Wrong type, missing required key, unknown key with `unknown: :reject` | `ActiveTypedParams::InvalidParameter` | `400` |
 | Too long, blank, or not one of the allowed values | `ActiveTypedParams::UnprocessableParameter` | `422` |
 
-Messages name the parameter and never echo the value, such as `delivery.recipient_id must be an id`.
+Messages name the parameter and never echo the value, such as `delivery.address_id must be an id`.
 
 Both are `ActionController::BadRequest` subclasses, so existing rescues keep working, and Rails answers with the right status in controllers without a `rescue_from`.
 
-Each error has a `path`, such as `["delivery", "recipient_id"]`, and a `code`, which you can use to render the error next to its field:
+Each error has a `path`, such as `["delivery", "address_id"]`, and a `code`, which you can use to render the error next to its field:
 
 ```ruby
 rescue_from ActiveTypedParams::InvalidParameter do |error|
@@ -401,7 +401,7 @@ end
 
 Every rejected parameter publishes an `invalid_parameters.typed_params` event with the `path`, `code`, `controller`, `action` and `request`.
 
-A `400` usually means a client bug or someone probing the app, so it's worth reporting, grouped by endpoint and path:
+To log `400` errors by endpoint and parameter path without including `422` validation errors:
 
 ```ruby
 ActiveSupport::Notifications.subscribe("invalid_parameters.typed_params") do |*, payload|
@@ -413,7 +413,7 @@ end
 
 > **Note**
 >
-> A subscriber that raises replaces the `400` with its own error, so make sure it can't.
+> Handle exceptions in subscribers; otherwise, they replace the original parameter error.
 
 ## Configuration ⚙️
 
@@ -429,7 +429,7 @@ end
 
 _Default:_ `65_535`
 
-The cap for `:text`, and for strings that inference leaves to the model or the interaction to validate.
+The length limit for `:text` and for inferred strings whose length is validated by the model or interaction.
 
 ### `ignored_filters`
 
@@ -509,19 +509,19 @@ end
 
 ## Design 📐
 
-Each schema is compiled into one straight-line Ruby method: nested hashes are inlined, arrays become loops, and allowlists become constants. There are no intermediate objects, which is where the speed comes from.
+Each schema is compiled into one straight-line Ruby method: nested hashes are inlined, arrays become loops, and allowlists become constants. This avoids allocating intermediate validation objects.
 
-With eager loading, every schema is compiled at boot, so no request pays for it. In development, a schema is compiled on first use, and code reloading starts over.
+With eager loading, every schema is compiled at boot rather than during a request. In development, schemas are compiled on first use and recompiled after code reloading.
 
 ### Benchmarks 📊
 
-Time per call with YJIT, 20,000 iterations, using params like the ones Rails passes to a controller:
+Time per call on Ruby 4.0 with YJIT, 20,000 iterations, using params like the ones Rails passes to a controller:
 
 | Request | `typed_params` | `params.permit` | ActiveInteraction |
 | --- | --- | --- | --- |
-| Login (2 keys) | 1.5 µs, 6 allocations | 7.5 µs, 48 | 12.2 µs, 65 |
-| Search (pagination, sort, 3 filters) | 4.1 µs, 13 | 38 µs, 190 | 46 µs, 221 |
-| Checkout draft (40 keys, 3 levels) | 19 µs, 27 | 192 µs, 821 | 219 µs, 974 |
+| Login (2 keys) | 0.6 µs, 6 allocations | 5.7 µs, 48 | 10 µs, 65 |
+| Search (pagination, sort, 3 filters) | 3.4 µs, 13 | 32 µs, 190 | 37 µs, 221 |
+| Checkout (40 keys, 3 levels) | 17 µs, 27 | 168 µs, 845 | 183 µs, 978 |
 
 You can run them with:
 

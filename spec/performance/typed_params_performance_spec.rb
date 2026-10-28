@@ -85,23 +85,23 @@ RSpec.describe "typed_params performance", :active_typed_params, if: ENV["RUN_TY
 
   let(:checkout) do
     ActiveTypedParamsSpec::BenchmarkCase.new(
-      name: "save_draft (40 keys, 3 levels)",
+      name: "checkout (40 keys, 3 levels)",
       payload: {
-        controller: "orders", action: "save_draft",
-        amount: 50, payment_method: "card", gift_wrap: false, store_ids: [1, 2, 3],
-        design_metadata: {design_name: "v3", background_color: "#fff", mask_name: "mask-1", mask_color: "#000", tagline: "Enjoy", is_custom_tagline: true, design_search_terms: %w[coffee brunch]},
-        delivery: {
-          delivery_date: "2026-12-24", delivery_method: "email", recipient_type: "Contact", recipient_id: 42,
-          recipient_email: "friend@example.com", recipient_phone_number: "+15555550123", same_email_reason: "", save_delivery_information: true,
-          recipient_mailing_address: {name: "Friend", street: "1 Main St", city: "Austin", state: "TX", zip: "78701"}
+        controller: "orders", action: "create",
+        total: 50, payment_method: "card", express_shipping: false, coupon_ids: [1, 2, 3],
+        preferences: {currency: "USD", locale: "en", theme: "dark", timezone: "America/Chicago", referrer: "newsletter", subscribe: true, interests: %w[coffee kitchen]},
+        shipping: {
+          ship_on: "2026-12-24", carrier: "ups", address_type: "Home", address_id: 42,
+          email: "ana@example.com", phone: "+15555550123", instructions: "", save_address: true,
+          address: {name: "Ana", street: "1 Main St", city: "Austin", state: "TX", zip: "78701"}
         },
-        greeting: {
-          from: "Max", to: "Friend", message: "Happy holidays!", category_id: 7, card: {id: 12},
-          greeting_card_customization: {
-            sender: "Max", recipient: "Friend", title: "Cheers", note: "See you soon",
-            story_slides: [
-              {photo: "blob-1", text: "One", frame: "classic", color_filter: "warm", stickers: [{key: "star", x: 0.1, y: 0.2, rotation: 0, scale: 1}, {key: "heart", x: 0.5, y: 0.5, rotation: 15, scale: 1.2}]},
-              {photo: "blob-2", text: "Two", frame: "classic", color_filter: "cool", stickers: []},
+        cart: {
+          channel: "web", campaign: "spring", notes: "Leave at the door", store_id: 7, customer: {id: 12},
+          packaging: {
+            box: "medium", filler: "paper", label: "Fragile", note: "Thanks!",
+            line_items: [
+              {sku: "MUG-1", name: "Mug", size: "M", color: "white", variant: "matte", engravings: [{key: "logo", x: 0.1, y: 0.2, rotation: 0, scale: 1}, {key: "initials", x: 0.5, y: 0.5, rotation: 15, scale: 1.2}]},
+              {sku: "TEE-2", name: "T-shirt", size: "L", color: "black", variant: "cotton", engravings: []},
             ]
           }
         }
@@ -109,46 +109,46 @@ RSpec.describe "typed_params performance", :active_typed_params, if: ENV["RUN_TY
       controller: Class.new(ActiveTypedParamsSpec::FakeController) {
         typed_params(:p) {
           optional {
-            decimal :amount
+            decimal :total
             string :payment_method
-            boolean :gift_wrap
-            array :store_ids, :id, bytes: 4
-            hash :design_metadata do
+            boolean :express_shipping
+            array :coupon_ids, :id, bytes: 4
+            hash :preferences do
               optional {
-                string :design_name, :background_color, :mask_name, :mask_color, :tagline
-                boolean :is_custom_tagline
-                array :design_search_terms, :string
+                string :currency, :locale, :theme, :timezone, :referrer
+                boolean :subscribe
+                array :interests, :string
               }
             end
-            hash :delivery do
+            hash :shipping do
               optional {
-                date :delivery_date
-                enum :delivery_method, %w[email mail text print]
-                string :recipient_type, in: ["User", "Contact"], allow_nil: true
-                id :recipient_id, allow_nil: true
-                string :recipient_email, :recipient_phone_number, :same_email_reason
-                boolean :save_delivery_information
-                hash :recipient_mailing_address do
+                date :ship_on
+                enum :carrier, %w[ups fedex usps dhl]
+                string :address_type, in: ["Home", "Office"], allow_nil: true
+                id :address_id, allow_nil: true
+                string :email, :phone, :instructions
+                boolean :save_address
+                hash :address do
                   optional { string :name, :street, :city, :state, :zip }
                 end
               }
             end
-            hash :greeting do
+            hash :cart do
               optional {
-                string :from, :to, allow_blank: true
-                string :message, max_length: 2000, allow_blank: true
-                id :category_id, bytes: 4
-                hash :card do
+                string :channel, :campaign, allow_blank: true
+                string :notes, max_length: 2000, allow_blank: true
+                id :store_id, bytes: 4
+                hash :customer do
                   id :id, bytes: 4
                 end
-                hash :greeting_card_customization do
+                hash :packaging do
                   optional {
-                    string :sender, :recipient, :title, :note
-                    array :story_slides do
+                    string :box, :filler, :label, :note
+                    array :line_items do
                       hash do
                         optional {
-                          string :photo, :video, :text, :frame, :color_filter
-                          array :stickers do
+                          string :sku, :name, :size, :color, :variant
+                          array :engravings do
                             hash do
                               string :key
                               float :x, :y, :rotation, :scale
@@ -166,56 +166,56 @@ RSpec.describe "typed_params performance", :active_typed_params, if: ENV["RUN_TY
       },
       permit: lambda { |params|
         params.permit(
-          :amount, :payment_method, :gift_wrap, store_ids: [],
-          design_metadata: [:design_name, :background_color, :mask_name, :mask_color, :tagline, :is_custom_tagline, design_search_terms: []],
-          delivery: [
-            :delivery_date, :delivery_method, :recipient_type, :recipient_id, :recipient_email, :recipient_phone_number,
-            :same_email_reason, :save_delivery_information, recipient_mailing_address: [:name, :street, :city, :state, :zip]
+          :total, :payment_method, :express_shipping, coupon_ids: [],
+          preferences: [:currency, :locale, :theme, :timezone, :referrer, :subscribe, interests: []],
+          shipping: [
+            :ship_on, :carrier, :address_type, :address_id, :email, :phone,
+            :instructions, :save_address, address: [:name, :street, :city, :state, :zip]
           ],
-          greeting: [
-            :from, :to, :message, :category_id, card: [:id],
-                                                greeting_card_customization: [
-                                                  :sender, :recipient, :title, :note,
-                                                  story_slides: [:photo, :video, :text, :frame, :color_filter, stickers: [:key, :x, :y, :rotation, :scale]]
-                                                ]
+          cart: [
+            :channel, :campaign, :notes, :store_id, customer: [:id],
+                                                    packaging: [
+                                                      :box, :filler, :label, :note,
+                                                      line_items: [:sku, :name, :size, :color, :variant, engravings: [:key, :x, :y, :rotation, :scale]]
+                                                    ]
           ]
         )
       },
       interaction: Class.new(ActiveTypedParamsSpec::BenchmarkInteraction) {
-        decimal :amount, default: nil
+        decimal :total, default: nil
         string :payment_method, default: nil
-        boolean :gift_wrap, default: nil
-        array :store_ids, default: nil do
+        boolean :express_shipping, default: nil
+        array :coupon_ids, default: nil do
           integer
         end
-        hash :design_metadata, default: nil do
-          string :design_name, :background_color, :mask_name, :mask_color, :tagline, default: nil
-          boolean :is_custom_tagline, default: nil
-          array :design_search_terms, default: nil do
+        hash :preferences, default: nil do
+          string :currency, :locale, :theme, :timezone, :referrer, default: nil
+          boolean :subscribe, default: nil
+          array :interests, default: nil do
             string
           end
         end
-        hash :delivery, default: nil do
-          date :delivery_date, default: nil
-          string :delivery_method, :recipient_type, :recipient_email, :recipient_phone_number, :same_email_reason, default: nil
-          integer :recipient_id, default: nil
-          boolean :save_delivery_information, default: nil
-          hash :recipient_mailing_address, default: nil do
+        hash :shipping, default: nil do
+          date :ship_on, default: nil
+          string :carrier, :address_type, :email, :phone, :instructions, default: nil
+          integer :address_id, default: nil
+          boolean :save_address, default: nil
+          hash :address, default: nil do
             string :name, :street, :city, :state, :zip, default: nil
           end
         end
-        hash :greeting, default: nil do
-          string :from, :to, :message, default: nil
-          integer :category_id, default: nil
-          hash :card, default: nil do
+        hash :cart, default: nil do
+          string :channel, :campaign, :notes, default: nil
+          integer :store_id, default: nil
+          hash :customer, default: nil do
             integer :id, default: nil
           end
-          hash :greeting_card_customization, default: nil do
-            string :sender, :recipient, :title, :note, default: nil
-            array :story_slides, default: nil do
+          hash :packaging, default: nil do
+            string :box, :filler, :label, :note, default: nil
+            array :line_items, default: nil do
               hash do
-                string :photo, :video, :text, :frame, :color_filter, default: nil
-                array :stickers, default: nil do
+                string :sku, :name, :size, :color, :variant, default: nil
+                array :engravings, default: nil do
                   hash do
                     string :key, default: nil
                     float :x, :y, :rotation, :scale, default: nil
@@ -267,7 +267,7 @@ RSpec.describe "typed_params performance", :active_typed_params, if: ENV["RUN_TY
     end
   end
 
-  it "builds and compiles the save_draft schema in a few milliseconds, once" do
+  it "builds and compiles the checkout schema in a few milliseconds, once" do
     schema = ActiveTypedParams.schema(checkout.controller, :p)
     block = schema.instance_variable_get(:@block)
 

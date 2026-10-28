@@ -49,11 +49,11 @@ RSpec.describe ActiveTypedParams::Builder, :active_typed_params do
       nodes = build {
         optional(
           message: string(max_length: 5000),
-          recipient_id: id(bytes: 4),
+          address_id: id(bytes: 4),
           method: %w[email mail].then { |values| enum(values) },
           delivery: [:street, zip: :string, days: array(:integer)],
           meta: {},
-          slides: array([:photo, stickers: array(key: string(required: true), x: :float)]),
+          line_items: array([:sku, engravings: array(key: string(required: true), x: :float)]),
           ids: array(id(bytes: 4)),
           card: hash(id: :string, json: true),
         )
@@ -61,14 +61,14 @@ RSpec.describe ActiveTypedParams::Builder, :active_typed_params do
       by_key = nodes.index_by(&:key)
 
       expect(by_key["message"]).to have_attributes(type: :string, max_length: 5000, required: false, allow_nil: true)
-      expect(by_key["recipient_id"]).to have_attributes(type: :id, bytes: 4)
+      expect(by_key["address_id"]).to have_attributes(type: :id, bytes: 4)
       expect(by_key["method"].enum_map).to eq("email" => "email", "mail" => "mail")
       expect(summarize(by_key["delivery"].children)).to eq([["street", :string, false, true], ["zip", :string, false, true], ["days", :array, false, true]])
       expect(by_key["delivery"].children.last.item).to have_attributes(type: :integer, key: nil)
       expect(by_key["meta"]).to have_attributes(type: :hash, open: true, children: [])
-      slides = by_key["slides"].item
-      expect(summarize(slides.children)).to eq([["photo", :string, false, true], ["stickers", :array, false, true]])
-      expect(summarize(slides.children.last.item.children)).to eq([["key", :string, true, false], ["x", :float, false, true]])
+      line_items = by_key["line_items"].item
+      expect(summarize(line_items.children)).to eq([["sku", :string, false, true], ["engravings", :array, false, true]])
+      expect(summarize(line_items.children.last.item.children)).to eq([["key", :string, true, false], ["x", :float, false, true]])
       expect(by_key["ids"].item).to have_attributes(type: :id, bytes: 4)
       expect(by_key["card"]).to have_attributes(json: true)
       expect(by_key["card"].children.map(&:key)).to eq(["id"])
@@ -76,16 +76,16 @@ RSpec.describe ActiveTypedParams::Builder, :active_typed_params do
 
     it "lets nested keys inherit the presence of their declaration, in lists and in blocks alike" do
       nodes = build {
-        required(delivery: [:street, address: [:zip]], card: hash { string :id }, slides: array(hash { string :photo }))
-        optional(greeting: [:from], tags: array(:string))
+        required(delivery: [:street, address: [:zip]], card: hash { string :id }, line_items: array(hash { string :sku }))
+        optional(contact: [:email], tags: array(:string))
       }
       by_key = nodes.index_by(&:key)
 
       expect(summarize(by_key["delivery"].children)).to eq([["street", :string, true, false], ["address", :hash, true, false]])
       expect(summarize(by_key["delivery"].children.last.children)).to eq([["zip", :string, true, false]])
       expect(summarize(by_key["card"].children)).to eq([["id", :string, true, false]])
-      expect(summarize(by_key["slides"].item.children)).to eq([["photo", :string, true, false]])
-      expect(summarize(by_key["greeting"].children)).to eq([["from", :string, false, true]])
+      expect(summarize(by_key["line_items"].item.children)).to eq([["sku", :string, true, false]])
+      expect(summarize(by_key["contact"].children)).to eq([["email", :string, false, true]])
       expect(by_key["tags"].item).to have_attributes(required: true, allow_nil: false)
     end
 
@@ -93,11 +93,11 @@ RSpec.describe ActiveTypedParams::Builder, :active_typed_params do
       nodes = build {
         required(
           tags: array(string(optional: true)),
-          slides: array(hash(photo: :string, optional: true)),
-          strict: array([:photo]),
+          line_items: array(hash(sku: :string, optional: true)),
+          strict: array([:sku]),
         )
         param(
-          stickers: array(hash { required(:key, x: :float) }),
+          engravings: array(hash { required(:key, x: :float) }),
           mixed: array(hash {
             required(:key)
             param(:note)
@@ -107,9 +107,9 @@ RSpec.describe ActiveTypedParams::Builder, :active_typed_params do
       by_key = nodes.index_by(&:key)
 
       expect(by_key["tags"].item).to have_attributes(required: true, allow_nil: true)
-      expect(summarize(by_key["slides"].item.children)).to eq([["photo", :string, false, true]])
-      expect(summarize(by_key["strict"].item.children)).to eq([["photo", :string, true, false]])
-      expect(summarize(by_key["stickers"].item.children)).to eq([["key", :string, true, false], ["x", :float, true, false]])
+      expect(summarize(by_key["line_items"].item.children)).to eq([["sku", :string, false, true]])
+      expect(summarize(by_key["strict"].item.children)).to eq([["sku", :string, true, false]])
+      expect(summarize(by_key["engravings"].item.children)).to eq([["key", :string, true, false], ["x", :float, true, false]])
       expect(summarize(by_key["mixed"].item.children)).to eq([["key", :string, true, false], ["note", :string, false, true]])
     end
 
@@ -206,9 +206,9 @@ RSpec.describe ActiveTypedParams::Builder, :active_typed_params do
           string :street
         end
         array :tags, :string, max_length: 5
-        array :slides do
+        array :line_items do
           hash do
-            string :photo
+            string :sku
           end
         end
         array :nullable_tags do
@@ -229,8 +229,8 @@ RSpec.describe ActiveTypedParams::Builder, :active_typed_params do
       expect(by_key["address"].children.map(&:key)).to eq(["street"])
       expect(by_key["tags"]).to have_attributes(max_length: 5)
       expect(by_key["tags"].item).to have_attributes(key: nil, type: :string, max_length: 512, allow_nil: false)
-      expect(by_key["slides"].item.type).to eq(:hash)
-      expect(by_key["slides"].item.children.map(&:key)).to eq(["photo"])
+      expect(by_key["line_items"].item.type).to eq(:hash)
+      expect(by_key["line_items"].item.children.map(&:key)).to eq(["sku"])
       expect(by_key["nullable_tags"].item.allow_nil).to be(true)
       expect(by_key["blob"].type).to eq(:any)
     end

@@ -237,14 +237,14 @@ RSpec.describe "typed_params validation", :active_typed_params do
       schema = proc {
         hash :delivery do
           string :street
-          optional { id :recipient_id }
+          optional { id :address_id }
         end
       }
 
       expect(validate({delivery: {street: "s"}}, &schema)).to eq(delivery: {street: "s"})
-      expect(validate({delivery: {street: "s", recipient_id: 3}}, &schema)).to eq(delivery: {street: "s", recipient_id: 3})
+      expect(validate({delivery: {street: "s", address_id: 3}}, &schema)).to eq(delivery: {street: "s", address_id: 3})
       expect(failure({delivery: {}}, &schema)).to eq([:missing, ["delivery", "street"]])
-      expect(failure({delivery: {street: "s", recipient_id: "x"}}, &schema)).to eq([:invalid_type, ["delivery", "recipient_id"]])
+      expect(failure({delivery: {street: "s", address_id: "x"}}, &schema)).to eq([:invalid_type, ["delivery", "address_id"]])
       expect(failure({delivery: "s"}, &schema)).to eq([:invalid_type, ["delivery"]])
       expect(failure({delivery: ["s"]}, &schema)).to eq([:invalid_type, ["delivery"]])
       expect(failure({delivery: nil}, &schema)).to eq([:missing, ["delivery"]])
@@ -278,16 +278,16 @@ RSpec.describe "typed_params validation", :active_typed_params do
     end
 
     it "still works after the controller accessed a nested key, which converts it to Parameters" do
-      params = ActionController::Parameters.new(delivery: {street: "s"}, slides: [{photo: "p"}])
+      params = ActionController::Parameters.new(delivery: {street: "s"}, line_items: [{sku: "p"}])
       params[:delivery]
-      params[:slides]
+      params[:line_items]
 
       result = validate(params) {
         hash(:delivery) { string :street }
-        array(:slides) { hash { string :photo } }
+        array(:line_items) { hash { string :sku } }
       }
 
-      expect(result).to eq(delivery: {street: "s"}, slides: [{photo: "p"}])
+      expect(result).to eq(delivery: {street: "s"}, line_items: [{sku: "p"}])
     end
   end
 
@@ -313,11 +313,11 @@ RSpec.describe "typed_params validation", :active_typed_params do
 
     it "validates arrays of objects and nested arrays with full paths" do
       schema = proc {
-        array :slides do
+        array :line_items do
           hash do
-            string :photo
+            string :sku
             optional {
-              array :stickers do
+              array :engravings do
                 hash do
                   float :x, required: true
                 end
@@ -327,11 +327,11 @@ RSpec.describe "typed_params validation", :active_typed_params do
         end
       }
 
-      expect(validate({slides: [{photo: "p", stickers: [{x: 1}]}]}, &schema)).to eq(slides: [{photo: "p", stickers: [{x: 1.0}]}])
-      expect(failure({slides: [{photo: "p"}, {photo: 3}]}, &schema)).to eq([:invalid_type, ["slides", 1, "photo"]])
-      expect(failure({slides: [{photo: "p", stickers: [{x: 1}, {x: "no"}]}]}, &schema)).to eq([:invalid_type, ["slides", 0, "stickers", 1, "x"]])
-      expect(failure({slides: [{photo: "p", stickers: [{}]}]}, &schema)).to eq([:missing, ["slides", 0, "stickers", 0, "x"]])
-      expect(failure({slides: ["p"]}, &schema)).to eq([:invalid_type, ["slides", 0]])
+      expect(validate({line_items: [{sku: "p", engravings: [{x: 1}]}]}, &schema)).to eq(line_items: [{sku: "p", engravings: [{x: 1.0}]}])
+      expect(failure({line_items: [{sku: "p"}, {sku: 3}]}, &schema)).to eq([:invalid_type, ["line_items", 1, "sku"]])
+      expect(failure({line_items: [{sku: "p", engravings: [{x: 1}, {x: "no"}]}]}, &schema)).to eq([:invalid_type, ["line_items", 0, "engravings", 1, "x"]])
+      expect(failure({line_items: [{sku: "p", engravings: [{}]}]}, &schema)).to eq([:missing, ["line_items", 0, "engravings", 0, "x"]])
+      expect(failure({line_items: ["p"]}, &schema)).to eq([:invalid_type, ["line_items", 0]])
     end
 
     it "parses JSON strings when json: true" do
@@ -464,15 +464,15 @@ RSpec.describe "typed_params validation", :active_typed_params do
     it "reads a direct upload as a signed id, dropping the attachment object a form posts back, in every form" do
       schema = proc {
         optional {
-          direct_upload :photo
-          param(memo: :direct_upload, slides: array([video: :direct_upload]))
+          direct_upload :sku
+          param(memo: :direct_upload, line_items: array([video: :direct_upload]))
         }
       }
       attachment = {"signed_id" => "signed-id", "url" => "/rails/active_storage/blobs/x"}
 
-      expect(validate({photo: "signed-id", memo: nil, slides: [{video: "other-id"}]}, &schema))
-        .to eq(photo: "signed-id", memo: nil, slides: [{video: "other-id"}])
-      expect(validate({photo: attachment, memo: attachment, slides: [{video: attachment}]}, &schema)).to eq(slides: [{}])
+      expect(validate({sku: "signed-id", memo: nil, line_items: [{video: "other-id"}]}, &schema))
+        .to eq(sku: "signed-id", memo: nil, line_items: [{video: "other-id"}])
+      expect(validate({sku: attachment, memo: attachment, line_items: [{video: attachment}]}, &schema)).to eq(line_items: [{}])
     end
   end
 
@@ -536,15 +536,15 @@ RSpec.describe "typed_params validation", :active_typed_params do
     it "raises a BadRequest naming the path, without echoing the value, and instruments it" do
       error = nil
       reported = ActiveTypedParamsSpec.notifications("invalid_parameters.typed_params") do
-        validate({delivery: {recipient_id: "secret-probe"}}) { hash(:delivery) { id :recipient_id } }
+        validate({delivery: {address_id: "secret-probe"}}) { hash(:delivery) { id :address_id } }
       rescue ActiveTypedParams::InvalidParameter => error
       end
 
       expect(error).to be_a(ActionController::BadRequest)
-      expect(error.message).to eq("delivery.recipient_id must be an id")
-      expect(error.path).to eq(["delivery", "recipient_id"])
+      expect(error.message).to eq("delivery.address_id must be an id")
+      expect(error.path).to eq(["delivery", "address_id"])
       expect(error.code).to eq(:invalid_type)
-      expect(reported).to eq([{path: "delivery.recipient_id", code: :invalid_type, controller: nil, action: "show", request: ActiveTypedParamsSpec.json_request}])
+      expect(reported).to eq([{path: "delivery.address_id", code: :invalid_type, controller: nil, action: "show", request: ActiveTypedParamsSpec.json_request}])
       expect(failure({}) { string :name }).to eq([:missing, ["name"]])
     end
 
